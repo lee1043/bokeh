@@ -324,6 +324,12 @@ The Bokeh project is grateful for [individual contributions](https://numfocus.or
          alt="Rex Logo" width="100"/>
     </a>
   </td>
+  <td>
+    <a href="https://nomnomdata.com/">
+    <img src="https://files.nomitall.nomnomdata.com/images/logo-small.svg"
+         alt="Nom Nom Data Logo" width="100"/>
+    </a>
+  </td>
 </tr>
 </table>
 

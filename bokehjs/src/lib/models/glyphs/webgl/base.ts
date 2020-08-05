@@ -1,7 +1,4 @@
 // This module implements the Base GL Glyph and some utilities
-import {Program, VertexBuffer} from "./utils"
-import {Arrayable} from "core/types"
-import {color2rgba} from "core/util/color"
 import {Context2d} from "core/util/canvas"
 import {logger} from "core/logging"
 import {GlyphView} from "../glyph"
@@ -19,9 +16,10 @@ export abstract class BaseGLGlyph {
 
   protected abstract init(): void
 
-  set_data_changed(n: number): void {
-    if (n != this.nvertices) {
-      this.nvertices = n
+  set_data_changed(): void {
+    const {data_size} = this.glyph
+    if (data_size != this.nvertices) {
+      this.nvertices = data_size
       this.size_changed = true
     }
 
@@ -42,7 +40,7 @@ export abstract class BaseGLGlyph {
     const [a, b, c] = [0, 1, 2]
     let wx = 1   // Weights to scale our vectors
     let wy = 1
-    let [dx, dy] = this.glyph.renderer.scope.map_to_screen([a*wx, b*wx, c*wx], [a*wy, b*wy, c*wy])
+    let [dx, dy] = this.glyph.renderer.coordinates.map_to_screen([a*wx, b*wx, c*wx], [a*wy, b*wy, c*wy])
     if (isNaN(dx[0] + dx[1] + dx[2] + dy[0] + dy[1] + dy[2])) {
       logger.warn(`WebGL backend (${this.glyph.model.type}): falling back to canvas rendering`)
       return false
@@ -50,10 +48,10 @@ export abstract class BaseGLGlyph {
     // Try again, but with weighs so we're looking at ~100 in screen coordinates
     wx = 100 / Math.min(Math.max(Math.abs(dx[1] - dx[0]), 1e-12), 1e12)
     wy = 100 / Math.min(Math.max(Math.abs(dy[1] - dy[0]), 1e-12), 1e12)
-    ;[dx, dy] = this.glyph.renderer.scope.map_to_screen([a*wx, b*wx, c*wx], [a*wy, b*wy, c*wy])
+    ;[dx, dy] = this.glyph.renderer.coordinates.map_to_screen([a*wx, b*wx, c*wx], [a*wy, b*wy, c*wy])
     // Test how linear it is
-    if ((Math.abs((dx[1] - dx[0]) - (dx[2] - dx[1])) > 1e-6) ||
-        (Math.abs((dy[1] - dy[0]) - (dy[2] - dy[1])) > 1e-6)) {
+    if ((Math.abs((dx[1] - dx[0]) - (dx[2] - dx[1])) > 1e-4) ||
+        (Math.abs((dy[1] - dy[0]) - (dy[2] - dy[1])) > 1e-4)) {
       logger.warn(`WebGL backend (${this.glyph.model.type}): falling back to canvas rendering`)
       return false
     }
@@ -79,109 +77,4 @@ export type Transform = {
   dy: number
   sx: number
   sy: number
-}
-
-export function line_width(width: number): number {
-  // Increase small values to make it more similar to canvas
-  if (width < 2) {
-    width = Math.sqrt(width*2)
-  }
-  return width
-}
-
-export function fill_array_with_float(n: number, val: number): Float32Array {
-  const a = new Float32Array(n)
-  for (let i = 0, end = n; i < end; i++) {
-    a[i] = val
-  }
-  return a
-}
-
-export function fill_array_with_vec(n: number, m: number, val: Arrayable<number>): Float32Array {
-  const a = new Float32Array(n*m)
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < m; j++) {
-      a[i*m + j] = val[j]
-    }
-  }
-  return a
-}
-
-export function visual_prop_is_singular(visual: any, propname: string): boolean {
-  // This touches the internals of the visual, so we limit use in this function
-  // See renderer.ts:cache_select() for similar code
-  return visual[propname].spec.value !== undefined
-}
-
-export function attach_float(prog: Program, vbo: VertexBuffer & {used?: boolean}, att_name: string, n: number, visual: any, name: string): void {
-  // Attach a float attribute to the program. Use singleton value if we can,
-  // otherwise use VBO to apply array.
-  if (!visual.doit) {
-    vbo.used = false
-    prog.set_attribute(att_name, 'float', [0])
-  } else if (visual_prop_is_singular(visual, name)) {
-    vbo.used = false
-    prog.set_attribute(att_name, 'float', [visual[name].value()])
-  } else {
-    vbo.used = true
-    const a = new Float32Array(visual.get_array(name))
-    vbo.set_size(n*4)
-    vbo.set_data(0, a)
-    prog.set_attribute(att_name, 'float', vbo)
-  }
-}
-
-export function attach_color(prog: Program, vbo: VertexBuffer & {used?: boolean}, att_name: string, n: number, visual: any, prefix: string): void {
-  // Attach the color attribute to the program. If there's just one color,
-  // then use this single color for all vertices (no VBO). Otherwise we
-  // create an array and upload that to the VBO, which we attahce to the prog.
-  let rgba
-  const m = 4
-  const colorname = prefix + '_color'
-  const alphaname = prefix + '_alpha'
-
-  if (!visual.doit) {
-    // Don't draw (draw transparent)
-    vbo.used = false
-    prog.set_attribute(att_name, 'vec4', [0, 0, 0, 0])
-  } else if (visual_prop_is_singular(visual, colorname) && visual_prop_is_singular(visual, alphaname)) {
-    // Nice and simple; both color and alpha are singular
-    vbo.used = false
-    rgba = color2rgba(visual[colorname].value(), visual[alphaname].value())
-    prog.set_attribute(att_name, 'vec4', rgba)
-  } else {
-    // Use vbo; we need an array for both the color and the alpha
-    let alphas, colors
-    vbo.used = true
-    // Get array of colors
-    if (visual_prop_is_singular(visual, colorname)) {
-      colors = ((() => {
-        const result = []
-        for (let i = 0, end = n; i < end; i++) {
-          result.push(visual[colorname].value())
-        }
-        return result
-      })())
-    } else {
-      colors = visual.get_array(colorname)
-    }
-    // Get array of alphas
-    if (visual_prop_is_singular(visual, alphaname)) {
-      alphas = fill_array_with_float(n, visual[alphaname].value())
-    } else {
-      alphas = visual.get_array(alphaname)
-    }
-    // Create array of rgbs
-    const a = new Float32Array(n*m)
-    for (let i = 0, end = n; i < end; i++) {
-      rgba = color2rgba(colors[i], alphas[i])
-      for (let j = 0, endj = m; j < endj; j++) {
-        a[(i*m)+j] = rgba[j]
-      }
-    }
-    // Attach vbo
-    vbo.set_size(n*m*4)
-    vbo.set_data(0, a)
-    prog.set_attribute(att_name, 'vec4', vbo)
-  }
 }

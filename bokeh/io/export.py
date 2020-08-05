@@ -155,9 +155,9 @@ def export_svgs(obj: Union[LayoutDOM, Document], *, filename: Optional[str] = No
     for i, svg in enumerate(svgs):
         if i > 0:
             idx = filename.find(".svg")
-            filename = filename[:idx] + "_{}".format(i) + filename[idx:]
+            filename = filename[:idx] + f"_{i}" + filename[idx:]
 
-        with io.open(filename, mode="w", encoding="utf-8") as f:
+        with open(filename, mode="w", encoding="utf-8") as f:
             f.write(svg)
 
         filenames.append(filename)
@@ -195,7 +195,7 @@ def get_screenshot_as_png(obj: Union[LayoutDOM, Document], *, driver: "Optional[
 
     with _tmp_html() as tmp:
         html = get_layout_html(obj, resources=resources, width=width, height=height)
-        with io.open(tmp.path, mode="w", encoding="utf-8") as file:
+        with open(tmp.path, mode="w", encoding="utf-8") as file:
             file.write(html)
 
         web_driver = driver if driver is not None else webdriver_control.get()
@@ -219,7 +219,7 @@ def get_svgs(obj: Union[LayoutDOM, Document], *, driver: "Optional[WebDriver]" =
 
     with _tmp_html() as tmp:
         html = get_layout_html(obj, resources=resources, width=width, height=height)
-        with io.open(tmp.path, mode="w", encoding="utf-8") as file:
+        with open(tmp.path, mode="w", encoding="utf-8") as file:
             file.write(html)
 
         web_driver = driver if driver is not None else webdriver_control.get()
@@ -346,13 +346,23 @@ def _maximize_viewport(web_driver: "WebDriver") -> Tuple[int, int, int]:
     return viewport_size
 
 _SVG_SCRIPT = """
-var serialized_svgs = [];
-var svgs = document.getElementsByClassName('bk-root')[0].getElementsByTagName("svg");
-for (var i = 0; i < svgs.length; i++) {
-    var source = (new XMLSerializer()).serializeToString(svgs[i]);
-    serialized_svgs.push(source);
-};
-return serialized_svgs
+const {LayoutDOMView} = Bokeh.require("models/layouts/layout_dom")
+const {PlotView} = Bokeh.require("models/plots/plot")
+
+function* collect_svgs(views) {
+  for (const view of views) {
+    if (view instanceof LayoutDOMView) {
+      yield* collect_svgs(view.child_views.values())
+    }
+    if (view instanceof PlotView && view.model.output_backend == "svg") {
+      const {ctx} = view.canvas_view.compose()
+      yield ctx.get_serialized_svg(true)
+    }
+  }
+}
+
+const root_views = Object.values(Bokeh.index)
+return [...collect_svgs(root_views)]
 """
 
 _WAIT_SCRIPT = """
@@ -370,8 +380,8 @@ else
   doc.idle.connect(done);
 """
 
-class _TempFile(object):
 
+class _TempFile:
     _closed: bool = False
 
     fd: int
@@ -395,12 +405,12 @@ class _TempFile(object):
 
         try:
             os.close(self.fd)
-        except (OSError, IOError):
+        except OSError:
             pass
 
         try:
             os.unlink(self.path)
-        except (OSError, IOError):
+        except OSError:
             pass
 
         self._closed = True

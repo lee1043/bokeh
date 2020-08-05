@@ -98,7 +98,7 @@ const caps: {[key: string]: number} = {
   butt: 5, '|': 5,
 }
 
-export class LineGLGlyph extends BaseGLGlyph {
+export class LineGL extends BaseGLGlyph {
   readonly glyph: LineView
 
   protected prog: Program
@@ -296,8 +296,8 @@ export class LineGLGlyph extends BaseGLGlyph {
     // Init array of implicit shape nx2
     let I, T, V_angles2, V_position2, V_tangents2, V_texcoord2, Vp, Vt
     const n = this.nvertices
-    const _x = new Float64Array(this.glyph._x)
-    const _y = new Float64Array(this.glyph._y)
+    const _x = new Float32Array(this.glyph._x)
+    const _y = new Float32Array(this.glyph._y)
 
     // Init vertex data
     const V_position = (Vp = new Float32Array(n*2))

@@ -24,7 +24,7 @@ ANY_VERSION = re.compile(r"^((\d+)\.(\d+)\.(\d+))((dev|rc)(\d+))?$")
 FULL_VERSION = re.compile(r"^(\d+\.\d+\.\d+)$")
 
 
-class Config(object):
+class Config:
     def __init__(self, version: str) -> None:
         m = ANY_VERSION.match(version)
         if not m:
@@ -71,7 +71,7 @@ class Config(object):
     def js_version(self) -> str:
         if self.ext is None:
             return self.version
-        return f"{self.version}-{self.ext_type}.{self.ext_number}"
+        return f"{self.base_version}-{self.ext_type}.{self.ext_number}"
 
     @property
     def release_level(self) -> str:
